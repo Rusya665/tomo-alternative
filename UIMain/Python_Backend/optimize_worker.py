@@ -85,6 +85,7 @@ def main():
             "dose_metrics": getattr(vam, "dose_metrics", None),
             "loss_history": loss,
             "sino_is_rebinned": bool(getattr(vam, "_sino_is_rebinned", False)),
+            "rebin_error": getattr(vam, "_rebin_error", None),
             "optimize_s": opt_s,
         }, f)
 

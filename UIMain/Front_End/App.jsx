@@ -260,16 +260,23 @@ export default function App() {
   const panDrag = useRef(null);
   const previewIntervalRef = useRef(null);
 
-  // Start/restart the frame-cycling player whenever previewInfo changes
+  // Start/restart the frame-cycling player whenever previewInfo or the RPM changes.
+  // Playback runs at the REAL print speed: the preview's frames span one rotation,
+  // and the vial turns at |rpm|, so rate = frames × |rpm| / 60 fps (sign = direction).
+  // Above ~40 Hz the timer can't keep up, so advance multiple frames per tick instead.
   useEffect(() => {
     if (previewIntervalRef.current) clearInterval(previewIntervalRef.current);
     if (!previewInfo) return;
-    const ms = 1000 / previewInfo.fps;
+    const n = previewInfo.frame_count;
+    const rate = n * Math.abs(videoRpm) / 60;          // frames/s for a real-time rotation
+    if (!(rate > 0)) return;                           // rpm 0 → paused
+    const stepN = Math.max(1, Math.ceil(rate / 40));
+    const dir = videoRpm < 0 ? -1 : 1;
     previewIntervalRef.current = setInterval(() => {
-      setPreviewFrame(f => (f + 1) % previewInfo.frame_count);
-    }, ms);
+      setPreviewFrame(f => (((f + dir * stepN) % n) + n) % n);
+    }, 1000 * stepN / rate);
     return () => clearInterval(previewIntervalRef.current);
-  }, [previewInfo]);
+  }, [previewInfo, videoRpm]);
 
   const [matrices, setMatrices] = useState({});
   const [cylinder, setCylinder] = useState({ radius: 10, height: 50 });   // default = Small vial
@@ -891,7 +898,7 @@ export default function App() {
       if (d.status === "cancelled") return;
       if (d.status !== "ok") { alert("Load failed: " + (d.message || "unknown error")); return; }
       if (d.gui_settings) applySettings(d.gui_settings);          // restore the whole GUI state
-      setSliceInfo({ angles: 0, frames: 0, dose: d.dose });
+      setSliceInfo({ angles: 0, frames: 0, dose: d.dose, rebin_warning: d.rebin_warning });
       setSliceStatus("done");
       setVideoStamp(Date.now());
       try {
@@ -1489,9 +1496,8 @@ export default function App() {
                     <Lbl>Iterations</Lbl>
                     <InfoBtn open={infoOpen === "iter"} onClick={infoTog("iter")} />
                   </div>
-                  <input type="number" min={1} value={nIter}
-                    onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 1) setNIter(v); }}
-                    style={{ width: 58, background: "#16161f", color: C.text, border: `1px solid ${C.border}`, borderRadius: 4, padding: "3px 6px", fontSize: 12, fontWeight: 700, fontFamily: "monospace", outline: "none", textAlign: "right" }} />
+                  <NumInput value={nIter} onChange={v => { const n = Math.round(v); if (n >= 1) setNIter(n); }}
+                    style={{ width: 58, fontSize: 12, fontWeight: 700, textAlign: "right" }} />
                 </div>
                 <input type="range" min={1} max={50} step={1} value={Math.min(nIter, 50)} onChange={e => setNIter(parseInt(e.target.value))} style={{ width: "100%" }} />
                 {infoOpen === "iter" && <div style={infoPop}>Number of optimization passes. More iterations sharpen the dose contrast (in-part vs out-of-part) at the cost of time; gains taper off — 5–15 is typical. The slider goes to 50; type in the box to go higher.</div>}
@@ -1560,20 +1566,8 @@ export default function App() {
               {sliceStatus === "error" && <div style={{ fontSize: 11, color: C.red }}>✗ Optimization failed</div>}
             </>)}
 
-            {step === 4 && (<>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>Video output</div>
-              <div>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-                  <Lbl>Vial RPM (rotation rate)</Lbl>
-                  <InfoBtn open={infoOpen === "rpm"} onClick={infoTog("rpm")} />
-                </div>
-                <SignedNumInput value={videoRpm} onChange={setVideoRpm} />
-                {infoOpen === "rpm" && <div style={infoPop}>Vial rotation speed during the print. One frame per degree, so this also sets the playback rate: <b style={{ color: C.text }}>{videoRpm} rpm → {videoFps} fps</b>. Negative = reverse direction.</div>}
-              </div>
-              <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.5 }}>
-                {framesPerDeg} frame/deg → <b style={{ color: C.text }}>{videoFps} fps</b> at {videoRpm} rpm. Set the video length next to <b style={{ color: C.text }}>Save run</b>. One rotation is encoded once and looped — fast.
-              </div>
-            </>)}
+            {/* step 4 has no sidebar content — the full-screen Output page covers it;
+                the video settings (RPM, length) live in its top bar instead. */}
           </div>
 
           <div style={{ display: "flex", gap: 8, padding: 12, borderTop: `1px solid ${C.border}`, flexShrink: 0 }}>
@@ -1591,16 +1585,33 @@ export default function App() {
             <div style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>Print Output</div>
             <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
               {previewInfo && <span style={{ fontSize: 11, color: C.muted }}>preview · one rotation, looped · {previewInfo.frame_count} frames</span>}
+              <div title={`Vial rotation speed during the print. ${framesPerDeg} frame/deg → ${videoFps} fps playback. Negative = reverse direction.`}
+                style={{ display: "flex", alignItems: "center", gap: 6, background: C.bgS, border: `1px solid ${C.border}`, borderRadius: 6, padding: "4px 10px" }}>
+                <span style={{ fontSize: 11, color: C.muted }}>Vial RPM</span>
+                <SignedNumInput value={videoRpm} onChange={setVideoRpm}
+                  style={{ width: 56, padding: "5px 7px", fontSize: 14, fontWeight: 700, textAlign: "right" }} />
+                <span style={{ fontSize: 11, color: C.muted }}>→ {videoFps} fps</span>
+              </div>
               <div style={{ display: "flex", alignItems: "center", gap: 6, background: C.bgS, border: `1px solid ${C.border}`, borderRadius: 6, padding: "4px 10px" }}>
                 <span style={{ fontSize: 11, color: C.muted }}>Video length</span>
-                <input type="number" min="0.1" step="0.5" value={videoDurMin}
-                  onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v) && v > 0) setVideoDurMin(v); }}
-                  style={{ width: 64, background: "#16161f", color: C.text, border: `1px solid ${C.border}`, borderRadius: 4, padding: "5px 7px", fontSize: 14, fontWeight: 700, fontFamily: "monospace", outline: "none", textAlign: "right" }} />
+                <NumInput value={videoDurMin} onChange={v => { if (v > 0) setVideoDurMin(v); }}
+                  style={{ width: 64, padding: "5px 7px", fontSize: 14, fontWeight: 700, textAlign: "right" }} />
                 <span style={{ fontSize: 11, color: C.muted }}>min</span>
               </div>
               <Btn variant="success" onClick={handleDownloadRun} disabled={!previewInfo || savingRun}>{savingRun ? "Encoding + saving…" : "Save run"}</Btn>
             </div>
           </div>
+          {sliceInfo?.rebin_warning && (
+            <div style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "7px 16px", flexShrink: 0,
+                background: "#4a3a10", borderBottom: "1px solid #8a6d1b", color: "#ffd966", fontSize: 12, lineHeight: 1.5 }}>
+              <span style={{ fontWeight: 800, whiteSpace: "nowrap" }}>⚠ Vial correction failed</span>
+              <span>
+                This output uses the <b>uncorrected</b> sinogram — the part may print distorted near the vial wall.
+                This is usually the machine running out of memory: enlarge the Windows page file (or close other apps), then re-optimize.
+                <span style={{ color: "#c9b06a" }}> ({sliceInfo.rebin_warning})</span>
+              </span>
+            </div>
+          )}
           <div style={{ flex: 1, minHeight: 0, display: "flex", overflow: "hidden" }}>
             <div style={{ flex: 1, minWidth: 0, position: "relative", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, overflow: "hidden" }}
               onWheel={previewInfo ? (e => { setVideoZoom(z => Math.min(8, Math.max(1, +(z * (e.deltaY < 0 ? 1.12 : 1 / 1.12)).toFixed(3)))); }) : undefined}
@@ -1676,9 +1687,8 @@ export default function App() {
                 <div onMouseDown={e => e.stopPropagation()} onWheel={e => e.stopPropagation()} style={{ position: "absolute", bottom: 14, left: "50%", transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: 9, background: `${C.bgS}f2`, border: `1px solid ${C.border}`, borderRadius: 8, padding: "7px 12px", boxShadow: "0 6px 20px rgba(0,0,0,0.45)" }}>
                   <span style={{ fontSize: 11, color: C.muted }}>Intensity</span>
                   <input type="range" min="0.2" max="15" step="0.05" value={videoIntensity} onChange={e => setVideoIntensity(parseFloat(e.target.value))} style={{ width: 84 }} />
-                  <input type="number" min="0" step="0.05" value={videoIntensity}
-                    onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v) && v >= 0) setVideoIntensity(v); }}
-                    style={{ width: 50, background: "#16161f", color: C.text, border: `1px solid ${C.border}`, borderRadius: 4, padding: "2px 4px", fontSize: 11, fontFamily: "monospace", outline: "none" }} />
+                  <NumInput value={videoIntensity} onChange={v => { if (v >= 0) setVideoIntensity(v); }}
+                    style={{ width: 50, padding: "2px 4px", fontSize: 11 }} />
                   <span style={{ fontSize: 11, color: C.muted }}>×</span>
                   <span style={{ fontSize: 11, color: C.muted, marginLeft: 6 }}>Zoom</span>
                   <button onClick={() => setVideoZoom(z => Math.max(1, +(z - 0.25).toFixed(2)))} style={zb}>−</button>

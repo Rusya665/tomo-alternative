@@ -292,6 +292,7 @@ class VAM:
             pass
         self.sino = pipe.sinogram
         self._sino_is_rebinned = False     # drives _video_scale (rebinned == projector px → 1.0)
+        self._rebin_error = None           # set if the vial-correction rebin fails (GUI warning)
         # Vial-curvature correction: rebin the parallel sinogram for refraction at the
         # vial wall (telecentric — throw_ratio=inf in the config), then drive the
         # printer video from the rebinned sinogram instead of the parallel one.
@@ -308,6 +309,9 @@ class VAM:
                 import traceback; traceback.print_exc()
                 # Fall back to the PARALLEL sinogram at its TRUE scale — never leave a
                 # half-corrected / empty video (this was the blank output-page failure).
+                # The flag flows to the GUI: an uncorrected output prints distorted near
+                # the vial wall, and the user must know before committing resin.
+                self._rebin_error = str(e)
                 print(f"[VAM] Vial-correction rebin failed ({e}); using parallel sinogram at its true scale")
         self.recon = pipe.reconstruction
         self.dose_metrics = self._compute_dose_metrics()

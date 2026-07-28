@@ -148,7 +148,7 @@ slice_start     = 0.0   # wall-clock at optimize start (for a time-based progres
 slice_estimate_s = 1.0  # estimated optimize wall-time (so the bar moves even at 1 iter)
 # vam.__dict__ keys that are NOT JSON-serializable / get rebuilt in the worker.
 SLICE_SKIP_ATTRS = {"t_geo", "sino", "recon", "_pipe", "dose_metrics", "_verbose_dir",
-                    "_sino_is_rebinned", "_optimize_s"}
+                    "_sino_is_rebinned", "_optimize_s", "_rebin_error"}
 
 import threading
 import vamtoolbox
@@ -1018,6 +1018,7 @@ def save_run():
                     "recon": vam.recon,
                     "dose_metrics": getattr(vam, "dose_metrics", None),
                     "sino_is_rebinned": bool(getattr(vam, "_sino_is_rebinned", False)),
+                    "rebin_error": getattr(vam, "_rebin_error", None),
                     "gui_settings": data.get("gui_settings"),
                     "run_params": _gather_run_params(vam),
                 }, f)
@@ -1046,6 +1047,7 @@ def load_run():
         vam.recon = d.get("recon")
         vam.dose_metrics = d.get("dose_metrics")
         vam._sino_is_rebinned = bool(d.get("sino_is_rebinned", False))
+        vam._rebin_error = d.get("rebin_error")   # absent in v1 .tomo files -> None
         if vam.sino is None:
             return jsonify({"status": "error", "message": "File has no sinogram"}), 400
         mp4_path = None
@@ -1055,10 +1057,12 @@ def load_run():
             print("[server] load preview build failed:", e); traceback.print_exc()
         sino = vam.sino.array
         slice_info = {"angles": int(sino.shape[1]), "frames": int(sino.shape[1]),
-                      "dose": vam.dose_metrics}
+                      "dose": vam.dose_metrics,
+                      "rebin_warning": vam._rebin_error}
         print(f"[server] Loaded run -> {os.path.basename(path)} (sino {tuple(sino.shape)})")
         return jsonify({"status": "ok", "gui_settings": d.get("gui_settings"),
                         "dose": vam.dose_metrics,
+                        "rebin_warning": vam._rebin_error,
                         "name": os.path.splitext(os.path.basename(path))[0]})
     except Exception as e:
         traceback.print_exc()
@@ -1163,6 +1167,7 @@ def _run_slice_job():
             _res = _json.load(f)
         vam.dose_metrics = _res.get("dose_metrics")
         vam._sino_is_rebinned = bool(_res.get("sino_is_rebinned", False))
+        vam._rebin_error = _res.get("rebin_error")
         vam._optimize_s = _res.get("optimize_s")
         slice_loss_history = _res.get("loss_history") or []
 
@@ -1170,7 +1175,8 @@ def _run_slice_job():
 
         sino = vam.sino.array
         slice_info = {"angles": int(sino.shape[1]), "frames": int(sino.shape[1]),
-                      "dose": getattr(vam, "dose_metrics", None)}
+                      "dose": getattr(vam, "dose_metrics", None),
+                      "rebin_warning": _res.get("rebin_error")}
 
         if slice_cancel:
             raise _Cancelled()

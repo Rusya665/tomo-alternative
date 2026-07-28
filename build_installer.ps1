@@ -4,12 +4,12 @@
 #  Usage (from anywhere):
 #     powershell -ExecutionPolicy Bypass -File C:\Users\wadde\Documents\VAMToolbox-main\build_installer.ps1
 #
-#  Output:  build\dist-app\Tomo Setup <version>.exe   (~547 MB; installs ~1.8 GB)
+#  Output:  build\dist-app\Tomo Setup <version>.exe   (~707 MB; installs ~2.3 GB)
 #
 #  Notes (why each step):
 #   * App = Electron + Flask/Python backend + a bundled Python runtime at
 #     build\python\ (Python 3.13 + .venv packages + vamtoolbox + astra-CUDA,
-#     torch removed to stay slim).
+#     plus torch + cupy since 1.0.1 for fast diffusion deconvolution).
 #   * vamtoolbox inside build\python is a COPY, so repo edits to vamtoolbox\
 #     must be re-synced in (step 3).
 #   * The backend (UIMain\Python_Backend: server.py, optimize_worker.py,
