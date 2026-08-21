@@ -188,13 +188,19 @@ export default function App() {
   // Materials: named bundles of optics/chemistry that drive the run — refractive
   // index (vial correction), absorption, diffusion.  Choose one, edit it, add new.
   const [materials, setMaterials] = useState([
-    { id: "default", name: "OpenCAL resin", index: 1.51, absorption: false, absorptionCoeff: 0.207, diffusion: false, diffusionCoeff: 1.1816e-4 },
+    { id: "default", name: "OpenCAL Standard Resin", index: 1.510, absorption: false, absorptionCoeff: 0.207, diffusion: false, diffusionCoeff: 1.1816e-4 },
+    { id: "pegda700", name: "PEGDA 700 Hydrogel", index: 1.465, absorption: false, absorptionCoeff: 0.080, diffusion: false, diffusionCoeff: 1.5e-4 },
+    { id: "methacrylate", name: "Methacrylate / Formlabs Clear", index: 1.510, absorption: false, absorptionCoeff: 0.120, diffusion: false, diffusionCoeff: 1.0e-4 },
+    { id: "ormocomp", name: "OrmoComp Hybrid Polymer", index: 1.520, absorption: false, absorptionCoeff: 0.050, diffusion: false, diffusionCoeff: 8.0e-5 },
+    { id: "eshell300", name: "E-Shell 300 (Medical Grade)", index: 1.512, absorption: false, absorptionCoeff: 0.150, diffusion: false, diffusionCoeff: 1.1e-4 },
   ]);
   const [materialId, setMaterialId] = useState("default");
   const activeMaterial = materials.find(m => m.id === materialId) || materials[0];
   const [materialModal, setMaterialModal] = useState(false);  // "add material" popup
   const [materialDraft, setMaterialDraft] = useState(null);   // new/edit-material form values
   const [editingMaterialId, setEditingMaterialId] = useState(null);  // null = add, else editing
+  const [calibVialDia, setCalibVialDia] = useState(20.0);    // OpenCAL sync helper vial inner dia (mm)
+  const [calibVialPx, setCalibVialPx] = useState(200);       // OpenCAL sync helper measured vial width (px)
   const [saveSinogram, setSaveSinogram] = useState(false);    // also save .npy on Save run (off by default)
   const [meshData, setMeshData] = useState(null);     // marching-cubes surface mesh
   const [meshGen, setMeshGen] = useState(0);          // bumps each new mesh -> forces a fresh viewer mount
@@ -467,12 +473,19 @@ export default function App() {
   };
   const openAddProjector = () => {
     setEditingProjectorId(null);
-    setProjectorDraft({ name: `Projector ${projectors.length + 1}`, pxW: 1080, pxH: 1920, pitchUm: 90, telecentric: true, throwRatio: 1.5 });
+    const vDia = (activeVial?.radius || 10) * 2;
+    setCalibVialDia(vDia);
+    setCalibVialPx(200);
+    setProjectorDraft({ name: `Projector ${projectors.length + 1}`, pxW: 1080, pxH: 1920, pitchUm: 100, telecentric: true, throwRatio: 1.5 });
     setProjectorModal(true);
   };
   const openEditProjector = () => {
     if (!activeProjector) return;
     setEditingProjectorId(activeProjector.id);
+    const vDia = (activeVial?.radius || 10) * 2;
+    setCalibVialDia(vDia);
+    const pitch = activeProjector.pitchUm || 100;
+    setCalibVialPx(Math.round((vDia / (pitch / 1000))));
     setProjectorDraft({ ...activeProjector });
     setProjectorModal(true);
   };
@@ -1088,6 +1101,39 @@ export default function App() {
               <div style={{ flex: 1 }}><Lbl>Height (px)</Lbl><NumInput step={1} value={projectorDraft.pxH} onChange={v => setProjectorDraft(d => ({ ...d, pxH: Math.max(1, Math.round(v)) }))} /></div>
             </div>
             <div style={{ marginTop: 10 }}><Lbl>Pixel pitch (µm)</Lbl><NumInput step={1} value={projectorDraft.pitchUm} onChange={v => setProjectorDraft(d => ({ ...d, pitchUm: Math.max(1, v) }))} /></div>
+
+            {/* OpenCAL Rig Calibration Helper */}
+            <div style={{ marginTop: 12, padding: "10px 12px", background: "#161622", borderRadius: 6, border: `1px solid ${C.border}` }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#a57bf8", marginBottom: 6, display: "flex", alignItems: "center", gap: 5 }}>
+                <span>⚡</span> OpenCAL Calibration Sync
+              </div>
+              <div style={{ display: "flex", gap: 6, alignItems: "flex-end" }}>
+                <div style={{ flex: 1 }}>
+                  <Lbl>Vial ID (mm)</Lbl>
+                  <NumInput step={0.5} value={calibVialDia} onChange={v => setCalibVialDia(Math.max(0.1, v))} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <Lbl>Vial (px)</Lbl>
+                  <NumInput step={1} value={calibVialPx} onChange={v => setCalibVialPx(Math.max(1, Math.round(v)))} />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (calibVialDia > 0 && calibVialPx > 0) {
+                      const calculatedPitch = Math.round((calibVialDia / calibVialPx) * 1000);
+                      setProjectorDraft(d => ({ ...d, pitchUm: calculatedPitch }));
+                    }
+                  }}
+                  style={{ background: "#5b34b8", color: "#fff", border: "none", borderRadius: 4, padding: "4px 8px", fontSize: 11, fontWeight: 700, cursor: "pointer", height: 26, marginBottom: 1 }}
+                >
+                  Apply
+                </button>
+              </div>
+              <div style={{ fontSize: 10, color: C.muted, marginTop: 4 }}>
+                Pitch = {calibVialPx > 0 ? ((calibVialDia / calibVialPx) * 1000).toFixed(1) : "0"} µm ({calibVialPx > 0 ? (calibVialDia / calibVialPx).toFixed(4) : "0"} mm/px)
+              </div>
+            </div>
+
             <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginTop: 12 }}>
               <div style={{ flex: 1, paddingBottom: 2 }}><Toggle value={projectorDraft.telecentric !== false} onChange={v => setProjectorDraft(d => ({ ...d, telecentric: v }))} label="Telecentric (collimated)" /></div>
               {projectorDraft.telecentric === false &&
@@ -1245,7 +1291,7 @@ export default function App() {
           {meshData && step >= 2 ? (
             <MeshViewer key={meshGen} vertices={meshData.vertices} normals={meshData.normals} indices={meshData.indices} cylinder={cylinder} resolution={voxMeshRes} printRadius={printRadius} showVial={showVial} />
           ) : (
-            <StlViewer ref={viewerRef} models={models} activeIdx={activeIdx} onActiveSelect={setActiveIdx} showGizmo={step === 1 && hasModel && activeTool !== "none"} onTransformChange={handleGizmoChange} matrices={matrices} xform={xform} cylinder={cylinder} printRadius={printRadius} showVial={showVial} />
+            <StlViewer ref={viewerRef} models={models} activeIdx={activeIdx} onActiveSelect={setActiveIdx} showGizmo={step === 1 && hasModel && activeTool !== "none"} onTransformChange={handleGizmoChange} matrices={matrices} xform={xform} cylinder={cylinder} printRadius={printRadius} showVial={showVial} outOfBounds={outOfBounds} />
           )}
 
 
@@ -1254,9 +1300,10 @@ export default function App() {
               Add or drag-and-drop an STL into the vial
             </div>
           )}
-          {outOfBounds && step <= 1 && !loading && (
-            <div style={{ position: "absolute", top: 16, left: "50%", transform: "translateX(-50%)", fontSize: 12, fontWeight: 600, color: "#fff", background: `${C.red}ee`, padding: "8px 16px", borderRadius: 6 }}>
-              ⚠ Model extends beyond the {fanBeam ? "vial-corrected print" : "vial"} boundary
+          {outOfBounds && step <= 1 && !loading && footprint && (
+            <div style={{ position: "absolute", top: 16, left: "50%", transform: "translateX(-50%)", fontSize: 12, fontWeight: 700, color: "#fff", background: "#d9383bee", padding: "8px 16px", borderRadius: 6, boxShadow: "0 4px 16px rgba(0,0,0,0.5)", zIndex: 12, display: "flex", alignItems: "center", gap: 6 }}>
+              <span>⚠️</span>
+              <span>Model extends beyond {fanBeam ? `printable green cylinder (radius ${footprint.radius.toFixed(1)}mm > max ${printRadius.toFixed(1)}mm)` : `vial wall (radius ${footprint.radius.toFixed(1)}mm > max ${cylinder.radius.toFixed(1)}mm)`}</span>
             </div>
           )}
 

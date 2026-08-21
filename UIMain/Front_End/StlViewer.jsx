@@ -3,7 +3,7 @@ import * as THREE from "three";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
 import { makeAxisGizmo } from "./axisGizmo";
 
-const StlViewer = forwardRef(function StlViewer({ models, activeIdx, onActiveSelect, showGizmo = false, onTransformChange, matrices, xform, cylinder, printRadius, showVial = true }, ref) {
+const StlViewer = forwardRef(function StlViewer({ models, activeIdx, onActiveSelect, showGizmo = false, onTransformChange, matrices, xform, cylinder, printRadius, showVial = true, outOfBounds = false }, ref) {
   const mountRef = useRef(null);
   const sRef     = useRef({});
   const toolRef  = useRef("none");
@@ -349,13 +349,19 @@ const StlViewer = forwardRef(function StlViewer({ models, activeIdx, onActiveSel
       const pr = printRadius || r;
       if (pr < r - 0.01) {
         const pGeo = new THREE.CylinderGeometry(pr, pr, h, 64, 1, true);
-        const pMat = new THREE.MeshStandardMaterial({ color: 0x2e7d18, transparent: true, opacity: 0.06, side: THREE.DoubleSide, depthWrite: false });
+        const cylColor = outOfBounds ? 0xd9383b : 0x2e7d18;
+        const pMat = new THREE.MeshStandardMaterial({
+          color: cylColor, transparent: true, opacity: outOfBounds ? 0.12 : 0.06, side: THREE.DoubleSide, depthWrite: false
+        });
         const pMesh = new THREE.Mesh(pGeo, pMat); pMesh.userData.isCylinder = true; scene.add(pMesh);
-        const pEdge = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.CylinderGeometry(pr, pr, h, 64, 1, false)), new THREE.LineBasicMaterial({ color: 0x2e7d18, transparent: true, opacity: 0.6 }));
+        const pEdge = new THREE.LineSegments(
+          new THREE.EdgesGeometry(new THREE.CylinderGeometry(pr, pr, h, 64, 1, false)),
+          new THREE.LineBasicMaterial({ color: cylColor, transparent: true, opacity: outOfBounds ? 0.95 : 0.6 })
+        );
         pEdge.userData.isCylinder = true; scene.add(pEdge);
       }
     }
-  }, [cylinder, printRadius, showVial]);
+  }, [cylinder, printRadius, showVial, outOfBounds]);
 
   // Safe targeted sync: ONLY applies if the change came from the side-panel inputs
   useEffect(() => {

@@ -279,6 +279,20 @@ class VAM:
         print(f"[VAM] Slicing — {self.method} iter={self.n_iter} d_h={self.d_h} "
               f"d_l={self.d_l} cuda={self.cuda} abs={self.absorption} diff={self.diffusion} "
               f"workers={_nj}/{os.cpu_count()}")
+
+        # Check target geometry envelope against refraction green-cylinder limit
+        if self.vial_correction and hasattr(self.t_geo, "array"):
+            try:
+                ny, nx, nz = self.t_geo.array.shape
+                part_r_mm = (max(nx, ny) / 2.0) * self.res
+                r_usable_mm = (self.vial_diam / 2.0) / max(self.resin_ri, 1.0)
+                if part_r_mm > r_usable_mm + 0.1:
+                    print(f"[VAM] ⚠️ Warning: Part radial envelope (r={part_r_mm:.2f}mm) exceeds refraction limit ({r_usable_mm:.2f}mm) for vial Ø{self.vial_diam:.1f}mm (n={self.resin_ri:.3f})")
+                else:
+                    print(f"[VAM] ✓ Part fits within printable green cylinder (r={part_r_mm:.2f}mm <= {r_usable_mm:.2f}mm)")
+            except Exception:
+                pass
+
         pipe = VAMPipeline(cfg, on_progress=progress_cb)
         pipe.target = self.t_geo                 # reuse the already-voxelized target
         pipe.optimize()
