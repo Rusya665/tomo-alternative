@@ -39,7 +39,7 @@ from server import app  # noqa: E402
 
 HOST = "127.0.0.1"
 PORT = 5174
-URL  = f"http://{HOST}:{PORT}"
+URL  = f"http://localhost:{PORT}"
 
 
 # ---------------------------------------------------------------------------
