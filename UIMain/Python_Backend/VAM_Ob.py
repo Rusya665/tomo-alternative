@@ -60,6 +60,7 @@ class VAM:
         self.video_codec      = "h265"  # "h265" | "mp4v"
         self.video_intensity  = 1.0     # projected-pattern brightness scale (GUI intensity control)
         self.video_v_offset_mm = 0.0    # vertical (Z) shift of the projection in the frame, mm (GUI control)
+        self.video_color_mode = "blue"  # "blue" (pure 450nm monochromatic laser) | "white" (RGB duplicate)
 
         # Full 4x4 column-major matrix from Three.js (flat list of 16 floats).
         # None = identity = use STL as-is.
@@ -593,6 +594,7 @@ class VAM:
         rpm        = float(getattr(self, "video_rpm", 1.0))
         duration_s = float(getattr(self, "video_duration_s", 300.0))
         codec      = str(getattr(self, "video_codec", "h265")).lower()
+        color_mode = str(getattr(self, "video_color_mode", "blue")).lower()
 
         # The vial turns at `rpm`; each output frame advances the projected angle
         # by rpm*6 deg/s ÷ fps, sampling the sinogram (which repeats every 360°).
@@ -611,6 +613,13 @@ class VAM:
             # bottom-origin pyglet path flips each frame; keep the saved video in the
             # same orientation as the real print (and as the live preview above).
             g = np.flipud(image_seq.images[idx])
+            if color_mode == "blue":
+                # Pure monochromatic blue channel (RGB: R=0, G=0, B=g).
+                # Shuts off red (~638nm) and green (~525nm) laser diodes on triple-laser
+                # projectors (Optoma ML1080), avoiding unwanted photothermal convection
+                # and chromatic focal dispersion in the photoresin vial.
+                zeros = np.zeros_like(g)
+                return np.stack([zeros, zeros, g], axis=2)
             return np.repeat(g[:, :, None], 3, axis=2)   # grey -> (H, W, 3) RGB
 
         # Encode through the ffmpeg binary BUNDLED with imageio-ffmpeg.  This is
@@ -680,6 +689,6 @@ class VAM:
         if not writer.isOpened():
             raise RuntimeError(f"cv2.VideoWriter failed to open '{save_path}'.")
         for k in range(total_frames):
-            writer.write(cv2.cvtColor(_frame(k)[:, :, 0], cv2.COLOR_GRAY2BGR))
+            writer.write(cv2.cvtColor(_frame(k), cv2.COLOR_RGB2BGR))
         writer.release()
         print(f"[VAM] Video saved (OpenCV mp4v fallback): {save_path}")

@@ -805,6 +805,7 @@ def start_slice():
     vam.video_rpm = float(data.get("video_rpm", 1.0))
     vam.video_duration_s = float(data.get("video_duration_s", 300.0))
     vam.video_codec = str(data.get("video_codec", "h265"))
+    vam.video_color_mode = str(data.get("video_color_mode", getattr(vam, "video_color_mode", "blue"))).lower()
 
     global slice_cancel, slice_start, slice_estimate_s
     slice_cancel = False
@@ -885,7 +886,9 @@ def _gather_run_params(v):
         "sinogram_shape": (list(v.sino.array.shape) if v.sino is not None else None),
         "n_angles": (int(v.sino.array.shape[1]) if v.sino is not None else None),
         "video": {"fps": v.video_fps, "rpm": v.video_rpm,
-                  "duration_s": v.video_duration_s, "codec": v.video_codec},
+                  "duration_s": v.video_duration_s, "codec": v.video_codec,
+                  "color_mode": getattr(v, "video_color_mode", "blue"),
+                  "intensity": getattr(v, "video_intensity", 1.0)},
         "timing_s": {k: round(float(val), 2) for k, val in pipe_t.items()},
         "dose_metrics": getattr(v, "dose_metrics", None),
     }
@@ -994,6 +997,10 @@ def save_run():
     if "video_rpm" in data: vam.video_rpm = float(data["video_rpm"])          # rpm/duration now set on the video page
     if "video_fps" in data: vam.video_fps = float(data["video_fps"])
     if "video_duration_s" in data: vam.video_duration_s = float(data["video_duration_s"])
+    if "video_color_mode" in data:
+        vam.video_color_mode = str(data["video_color_mode"]).lower()
+    elif "color_mode" in data:
+        vam.video_color_mode = str(data["color_mode"]).lower()
     path = save_file_dialog(default_name + ".mp4")
     if not path:
         return jsonify({"status": "cancelled"})

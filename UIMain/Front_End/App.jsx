@@ -203,6 +203,7 @@ export default function App() {
   const [videoRpm, setVideoRpm] = useState(9);        // vial rotation speed (print parameter)
   const [videoDurMin, setVideoDurMin] = useState(5);  // total video / print length
   const [videoCodec, setVideoCodec] = useState("h265");
+  const [videoColorMode, setVideoColorMode] = useState("blue"); // "blue" (pure 450nm) | "white"
   const [framesPerDeg, setFramesPerDeg] = useState(1);  // 1 frame per degree (advanced, in Settings)
   const videoFps = Math.max(1, Math.round(framesPerDeg * 6 * Math.abs(videoRpm)));  // |rpm| = speed; sign = direction
 
@@ -336,6 +337,7 @@ export default function App() {
     if (s.videoDurMin != null) setVideoDurMin(s.videoDurMin);
     if (s.framesPerDeg != null) setFramesPerDeg(s.framesPerDeg);
     if (s.videoCodec) setVideoCodec(s.videoCodec);
+    if (s.videoColorMode) setVideoColorMode(s.videoColorMode);
     // saveSinogram intentionally NOT restored — the .tomo save is a per-run choice, off by default
     if (s.method) setMethod(s.method);
     if (s.nIter != null) setNIter(s.nIter);
@@ -353,7 +355,7 @@ export default function App() {
   }
   function collectSettings() {
     return { materials, materialId, projectors, projector, vials, vial, cylinder, showVial, showVialFrame, basePitch, resolution,
-      videoRpm, videoDurMin, framesPerDeg, videoCodec,
+      videoRpm, videoDurMin, framesPerDeg, videoCodec, videoColorMode,
       method, nIter, dH, dL, learningRate, bclpEps, bclpWeight,
       absorption, diffusion, slab, fanBeam, autoScaleSuggest, verboseOpt };
   }
@@ -365,7 +367,7 @@ export default function App() {
   useEffect(() => {
     if (!settingsLoaded.current) return;
     try { localStorage.setItem("tomo_settings", JSON.stringify(collectSettings())); } catch (e) { /* quota/private */ }
-  }, [materials, materialId, projectors, projector, vials, vial, cylinder, showVial, showVialFrame, basePitch, resolution, videoRpm, videoDurMin, framesPerDeg, videoCodec, method, nIter, dH, dL, learningRate, bclpEps, bclpWeight, absorption, diffusion, slab, fanBeam, autoScaleSuggest, verboseOpt]);
+  }, [materials, materialId, projectors, projector, vials, vial, cylinder, showVial, showVialFrame, basePitch, resolution, videoRpm, videoDurMin, framesPerDeg, videoCodec, videoColorMode, method, nIter, dH, dL, learningRate, bclpEps, bclpWeight, absorption, diffusion, slab, fanBeam, autoScaleSuggest, verboseOpt]);
   const RESIN_RI = activeMaterial?.index || 1.51;  // resin refractive index (from the active material)
   // Usable print radius: refraction at the curved vial wall limits reach to ~vial_radius / n
   const printRadius = fanBeam ? cylinder.radius / RESIN_RI : cylinder.radius;
@@ -799,7 +801,8 @@ export default function App() {
                                telecentric: activeProjector.telecentric !== false,
                                throw_ratio: activeProjector.throwRatio,
                                video_fps: videoFps, video_rpm: videoRpm,
-                               video_duration_s: videoDurMin * 60, video_codec: videoCodec }),
+                               video_duration_s: videoDurMin * 60, video_codec: videoCodec,
+                               video_color_mode: videoColorMode }),
       });
       const d = await res.json();
       if (d.status === "started" || d.status === "ok") pollSlice();
@@ -883,6 +886,7 @@ export default function App() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ default_name: base, save_sinogram: saveSinogram, video_intensity: videoIntensity,
                                video_rpm: videoRpm, video_fps: videoFps, video_duration_s: videoDurMin * 60,
+                               video_color_mode: videoColorMode,
                                gui_settings: collectSettings() }),   // embedded in the .tomo for reload
       });
       const d = await res.json();
@@ -1597,6 +1601,15 @@ export default function App() {
                 <NumInput value={videoDurMin} onChange={v => { if (v > 0) setVideoDurMin(v); }}
                   style={{ width: 64, padding: "5px 7px", fontSize: 14, fontWeight: 700, textAlign: "right" }} />
                 <span style={{ fontSize: 11, color: C.muted }}>min</span>
+              </div>
+              <div title="Laser color channel for video output. Monochromatic Blue (450 nm) shuts off Red and Green lasers on RGB triple-laser projectors (Optoma ML1080)."
+                style={{ display: "flex", alignItems: "center", gap: 6, background: C.bgS, border: `1px solid ${C.border}`, borderRadius: 6, padding: "4px 10px" }}>
+                <span style={{ fontSize: 11, color: C.muted }}>Laser</span>
+                <select value={videoColorMode} onChange={e => setVideoColorMode(e.target.value)}
+                  style={{ background: "transparent", color: videoColorMode === "blue" ? "#60a5fa" : "#fff", border: "none", fontSize: 13, fontWeight: 700, outline: "none", cursor: "pointer" }}>
+                  <option value="blue" style={{ background: "#1c1c28", color: "#60a5fa" }}>Blue (450nm)</option>
+                  <option value="white" style={{ background: "#1c1c28", color: "#fff" }}>White (RGB)</option>
+                </select>
               </div>
               <Btn variant="success" onClick={handleDownloadRun} disabled={!previewInfo || savingRun}>{savingRun ? "Encoding + saving…" : "Save run"}</Btn>
             </div>
